@@ -171,9 +171,8 @@ def parse_bilanz(df):
                  (isinstance(cell_content, (int, float)) and 1000 <= cell_content < 10000):
                 key = df.iloc[i, start_col_index + 1].strip()
                 try:
-                    val1 = float(df.iloc[i, start_col_index + 2])
-                    val2 = float(df.iloc[i, start_col_index + 3])
-                    data_dict[key] = (val1, val2)
+                    value = float(df.iloc[i, start_col_index + 3])
+                    data_dict[key] = value
                 except (ValueError, TypeError):
                     pass
 
@@ -203,7 +202,7 @@ def load_financial_data(uploaded_file):
     if "Bilanz" in xls.sheet_names:
         bilanz_df = pd.read_excel(xls, "Bilanz", header=None)
         processed_bilanz_df = process_dataframe(bilanz_df)
-        financial_data["Bilanz"] = processed_bilanz_df
+        # financial_data["Bilanz"] = processed_bilanz_df
         
         aktiva, passiva = parse_bilanz(processed_bilanz_df)
         financial_data["Aktiva"] = aktiva

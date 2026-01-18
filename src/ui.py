@@ -10,6 +10,7 @@ import tempfile
 import re
 import unicodedata # Import unicodedata
 from visualizations import create_waterfall_chart
+import markdown
 
 def escape_latex(text):
     """
@@ -62,12 +63,11 @@ def _get_waterfall_chart_data(full_financial_data, for_latex=False):
     waterfall_x = []
     waterfall_y = []
     waterfall_measure = []
-    waterfall_colors = []
 
     aufwand_data = full_financial_data.get("Aufwand", {})
     if not aufwand_data:
         st.warning("Aufwand data not available for waterfall chart.")
-        return [], [], [], []
+        return [], [], []
 
     # Define the keys for the main total and the final result
     AUFWANDE_KEY = "Aufwände"
@@ -76,14 +76,13 @@ def _get_waterfall_chart_data(full_financial_data, for_latex=False):
     # Ensure the main 'Aufwände' total exists
     if AUFWANDE_KEY not in aufwand_data:
         st.warning(f"'{AUFWANDE_KEY}' not found in Aufwand data.")
-        return [], [], [], []
+        return [], [], []
 
     # 1. Add the main "Aufwände" total as the starting absolute bar
     aufwande_total_value = aufwand_data[AUFWANDE_KEY]
     waterfall_x.append(escape_latex(AUFWANDE_KEY) if for_latex else AUFWANDE_KEY)
     waterfall_y.append(aufwande_total_value)
     waterfall_measure.append("absolute")
-    waterfall_colors.append("rgba(220, 20, 60, 0.7)") # Crimson
 
     # 2. Add the breakdown categories (keys without numbers) as relative bars
     for key, value in aufwand_data.items():
@@ -96,7 +95,6 @@ def _get_waterfall_chart_data(full_financial_data, for_latex=False):
             waterfall_x.append(escape_latex(key) if for_latex else key)
             waterfall_y.append(-value) # Negative for breakdown
             waterfall_measure.append("relative")
-            waterfall_colors.append("rgba(220, 20, 60, 0.7)") # Crimson
 
     # 3. Add the final result bar
     if FINAL_RESULT_KEY in aufwand_data:
@@ -104,9 +102,8 @@ def _get_waterfall_chart_data(full_financial_data, for_latex=False):
         waterfall_x.append(escape_latex(FINAL_RESULT_KEY) if for_latex else FINAL_RESULT_KEY)
         waterfall_y.append(final_result_value)
         waterfall_measure.append("total")
-        waterfall_colors.append("rgba(60, 179, 113, 0.7)") # MediumSeaGreen
     
-    return waterfall_x, waterfall_y, waterfall_measure, waterfall_colors
+    return waterfall_x, waterfall_y, waterfall_measure
 
 
 def generate_pdf_with_pandoc(report_title, image_file, dynamic_date_range, dynamic_primary_market_area, full_financial_data):
@@ -126,10 +123,10 @@ def generate_pdf_with_pandoc(report_title, image_file, dynamic_date_range, dynam
             hero_image_path = tmp_image.name
 
         # --- Waterfall Chart Data Extraction ---
-        waterfall_x, waterfall_y, waterfall_measure, waterfall_colors = _get_waterfall_chart_data(full_financial_data, for_latex=True)
+        waterfall_x, waterfall_y, waterfall_measure = _get_waterfall_chart_data(full_financial_data, for_latex=True)
 
         # --- Create and save the waterfall chart ---
-        waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure, waterfall_colors)
+        waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure)
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_chart:
             chart_filename = tmp_chart.name
             waterfall_fig.write_image(chart_filename, scale=2)
@@ -180,27 +177,13 @@ def generate_pdf_with_pandoc(report_title, image_file, dynamic_date_range, dynam
 
         ertraege_df = pd.DataFrame(list(ertraege_data.items()), columns=['Beschreibung', 'Betrag (CHF)'])
         aufwand_df = pd.DataFrame(list(aufwand_data.items()), columns=['Beschreibung', 'Betrag (CHF)'])
-        
-        aktiva_df_data = []
-        for key, value in aktiva_data.items():
-            if isinstance(value, tuple):
-                aktiva_df_data.append([key, value[0], value[1]])
-            else:
-                aktiva_df_data.append([key, None, value])
-        aktiva_df = pd.DataFrame(aktiva_df_data, columns=['Konto', 'Vorjahr', 'Aktuell'])
-
-        passiva_df_data = []
-        for key, value in passiva_data.items():
-            if isinstance(value, tuple):
-                passiva_df_data.append([key, value[0], value[1]])
-            else:
-                passiva_df_data.append([key, None, value])
-        passiva_df = pd.DataFrame(passiva_df_data, columns=['Konto', 'Vorjahr', 'Aktuell'])
+        aktiva_df = pd.DataFrame(list(aktiva_data.items()), columns=['Konto', 'Betrag (CHF)'])
+        passiva_df = pd.DataFrame(list(passiva_data.items()), columns=['Konto', 'Betrag (CHF)'])
 
         ertraege_table_tex = df_to_latex(ertraege_df, "lr", ['Betrag (CHF)'])
         aufwand_table_tex = df_to_latex(aufwand_df, "lr", ['Betrag (CHF)'])
-        aktiva_table_tex = df_to_latex(aktiva_df, "lrr", ['Vorjahr', 'Aktuell'])
-        passiva_table_tex = df_to_latex(passiva_df, "lrr", ['Vorjahr', 'Aktuell'])
+        aktiva_table_tex = df_to_latex(aktiva_df, "lr", ['Betrag (CHF)'])
+        passiva_table_tex = df_to_latex(passiva_df, "lr", ['Betrag (CHF)'])
 
         # --- Pre-process Template ---
         with open(template_path, 'r', encoding='utf-8') as f:
@@ -216,6 +199,10 @@ def generate_pdf_with_pandoc(report_title, image_file, dynamic_date_range, dynam
             temp_template_path = tmp_template.name
 
         # --- Set up Pandoc Metadata (excluding tables) ---
+        budget_proposal_latex = pypandoc.convert_text(
+            st.session_state.get('generated_budget', "..."), 'latex', format='md', extra_args=['--wrap=none']
+        )
+        
         markdown_content = "" 
         metadata = {
             'title': escape_latex(dynamic_primary_market_area),
@@ -235,7 +222,8 @@ def generate_pdf_with_pandoc(report_title, image_file, dynamic_date_range, dynam
             'kpi3_value': escape_latex("CHF 1,850"),
             'kpi3_desc': escape_latex("Schlüsselindikator für Marktgesundheit..."),
             'waterfall_chart': chart_filename,
-            'waterfall_explanation': escape_latex("Explanation of the waterfall chart will be generated here."),
+            'waterfall_explanation': escape_latex(st.session_state.get('waterfall_explanation', "...")),
+            'budget_proposal': budget_proposal_latex,
         }
         
         pandoc_args = ['--template', temp_template_path, '--pdf-engine=pdflatex']
@@ -288,9 +276,9 @@ def display_html_report(report_title, image_file, full_financial_data):
             st.warning("Could not extract primary market area from Erfolgsrechnung. Using default.")
 
     # --- Waterfall Chart Data Extraction for HTML ---
-    waterfall_x, waterfall_y, waterfall_measure, waterfall_colors = _get_waterfall_chart_data(full_financial_data, for_latex=False)
+    waterfall_x, waterfall_y, waterfall_measure = _get_waterfall_chart_data(full_financial_data, for_latex=False)
 
-    waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure, waterfall_colors)
+    waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure)
     waterfall_html = waterfall_fig.to_html(full_html=False, include_plotlyjs='cdn')
 
     template_dir = '../templates'
@@ -308,8 +296,12 @@ def display_html_report(report_title, image_file, full_financial_data):
         css_content = ""
         st.warning("tailwind.css not found.")
 
+    def markdown_to_html(md):
+        return markdown.markdown(md)
+
     env = Environment(loader=FileSystemLoader(template_dir))
     env.filters['currency'] = format_currency
+    env.filters['markdown'] = markdown_to_html
     template = env.get_template('mgmtreporting.html')
 
     ertraege_data = full_financial_data.get('Erträge', {})
@@ -332,7 +324,8 @@ def display_html_report(report_title, image_file, full_financial_data):
         'waterfall_chart_html': waterfall_html,
         'blockquote': st.session_state.get('generated_blockquote', "..."),
         'executivesummary': st.session_state.get('generated_summary', "..."),
-        'waterfall_explanation_html': "Explanation of the waterfall chart will be generated here.",
+        'waterfall_explanation_html': st.session_state.get('waterfall_explanation', "Explanation of the waterfall chart will be generated here."),
+        'budget_proposal_html': st.session_state.get('generated_budget', "Budget proposal will be generated here."),
     }
 
     html_content = template.render(report_context)

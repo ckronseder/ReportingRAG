@@ -11,7 +11,7 @@ if latex_path not in os.environ['PATH']:
 
 from data_loader import load_financial_data
 from ui import display_html_report
-from llm_handler import generate_summary_with_gemini
+from llm_handler import generate_summary_with_gemini, generate_waterfall_explanation, generate_budget_proposal
 
 # Initialize session state for view management
 if 'view_mode' not in st.session_state:
@@ -24,6 +24,10 @@ if 'generated_blockquote' not in st.session_state:
     st.session_state.generated_blockquote = "Der Markt erlebte im letzten Quartal eine beispiellose Liquidität..."
 if 'generated_summary' not in st.session_state:
     st.session_state.generated_summary = "Dank eines günstigen wirtschaftlichen Umfelds..."
+if 'waterfall_explanation' not in st.session_state:
+    st.session_state.waterfall_explanation = "Explanation of the waterfall chart will be generated here."
+if 'generated_budget' not in st.session_state:
+    st.session_state.generated_budget = "Budget proposal will be generated here."
 
 
 def main():
@@ -70,14 +74,24 @@ def main():
                 st.image(uploaded_image, caption="Vorschau des Deckblatt-Bildes", width=300)
 
         st.header("3. Anmerkungen für die Zusammenfassung")
-        user_notes = st.text_area("Fügen Sie hier Ihre Notizen ein:", height=150)
+        user_notes = st.text_area("Fügen Sie hier Ihre Notizen ein:", height=150, key="summary_notes")
+
+        st.header("4. Budget für das kommende Jahr")
+        budget_notes = st.text_area("Fügen Sie hier Ihre Budgetvorschläge ein:", height=150, key="budget_notes")
 
         if st.sidebar.button("Bericht erstellen"):
             if st.session_state.uploaded_report and st.session_state.uploaded_image:
                 with st.spinner("Generiere Zusammenfassung mit Gemini..."):
-                    blockquote, summary = generate_summary_with_gemini(user_notes, st.session_state.get('full_financial_data', {}))
+                    financial_data = st.session_state.get('full_financial_data', {})
+                    blockquote, summary = generate_summary_with_gemini(user_notes, financial_data)
                     st.session_state.generated_blockquote = blockquote
                     st.session_state.generated_summary = summary
+                    
+                    aufwand_data = financial_data.get('Aufwand', {})
+                    st.session_state.waterfall_explanation = generate_waterfall_explanation(aufwand_data)
+
+                    st.session_state.generated_budget = generate_budget_proposal(budget_notes, financial_data)
+
                 st.session_state.view_mode = 'report_view'
                 st.rerun()
             else:

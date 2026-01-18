@@ -10,17 +10,21 @@ def create_waterfall_chart(x_labels, y_values, measures, colors=None):
         fig.update_layout(title="Waterfall Chart (No Data Available)")
         return fig
 
+    # Format text labels for the bars
+    text_labels = [f"{val/1000:,.1f}k" for val in y_values]
+
     fig = go.Figure(go.Waterfall(
-        name = "Breakdown",
+        name = "Breakdown", 
         orientation = "v",
         measure = measures,
         x = x_labels,
         y = y_values,
-        connector = {"line":{"color":"rgb(137, 148, 153)"}},
-        increasing = {"marker":{"color":"rgb(63, 63, 63)"}}, # MediumSeaGreen for positive changes (dimmer green)
-        decreasing = {"marker":{"color":"rgb(0, 139, 9)"}}, # Crimson for negative changes (dimmer red)
-        totals = {"marker":{"color":"rgb(164, 132, 9)"}},     # SteelBlue for total bars (dimmer blue)
-        # marker = {"color": colors} if colors else None # Use provided colors array if available
+        text = text_labels,
+        textposition = "outside",
+        connector = {"line":{"color":"rgb(63, 63, 63)"}},
+        increasing = {"marker":{"color":"#3CB371"}}, # MediumSeaGreen for positive changes
+        decreasing = {"marker":{"color":"#DC143C"}}, # Crimson for negative changes
+        totals = {"marker":{"color":"#4682B4"}},     # SteelBlue for total bars
     ))
 
     fig.update_layout(

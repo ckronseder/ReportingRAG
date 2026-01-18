@@ -18,11 +18,16 @@
 \usepackage{booktabs}
 \usepackage{multicol}
 \usepackage{tabularx}
+\usepackage{fancyhdr} % Added for custom headers/footers
 
 % ────────────────────────────────────────────────────────────────
-% Page geometry
+% Page geometry & Style
 % ────────────────────────────────────────────────────────────────
-\geometry{a4paper, landscape, margin=1cm}
+\geometry{a4paper, landscape, margin=1cm, bottom=2cm} % Increased bottom margin
+\pagestyle{fancy}
+\fancyhf{} % Clear all header and footer fields
+\cfoot{\thepage} % Center page number in footer
+\renewcommand{\headrulewidth}{0pt} % No header rule
 
 % ────────────────────────────────────────────────────────────────
 % Custom colours
@@ -46,7 +51,7 @@
     {\Large\bfseries\color{LeliaOrange} 2. Zusammenfassung \& Leistungskennzahlen (KPIs)}
     \rule{\textwidth}{0.4pt}
     \vspace{1cm}
-    \begin{minipage}[t]{0.63\textwidth}
+    \begin{minipage}[t]{0.60\textwidth}
       \begin{tcolorbox}[colback=LeliaGray, colframe=LeliaOrange, boxrule=0pt, leftrule=3mm, sharp corners]
         \itshape "$blockquote$"
       \end{tcolorbox}
@@ -54,7 +59,7 @@
       $executivesummary$
     \end{minipage}
     \hfill
-    \begin{minipage}[t]{0.33\textwidth}
+    \begin{minipage}[t]{0.30\textwidth}
       \begin{tcolorbox}[colback=white, sharp corners, boxrule=0.5pt, colframe=gray!30, borderline north={2pt}{0pt}{LeliaOrange}]
         \small\bfseries\color{gray} $kpi1_title$ \par
         \vspace{0.1cm}
@@ -139,12 +144,20 @@
     \end{minipage}
     \hfill
     \begin{minipage}[t]{0.35\textwidth}
-      \begin{tcolorbox}[colback=LeliaGray, sharp corners, boxrule=0.5pt, colframe=gray!30]
-        \small\bfseries\color{LeliaOrange} Erläuterung zum Wasserfalldiagramm \par
+        {\small\bfseries\color{LeliaOrange} Erläuterungen zur Erfolgsrechnung}\par
         \vspace{0.3cm}
         \small $waterfall_explanation$
-      \end{tcolorbox}
     \end{minipage}
+  \end{adjustwidth}
+}
+
+\newcommand{\printsectionsix}{
+  \clearpage
+  \begin{adjustwidth}{1cm}{1cm}
+    {\Large\bfseries\color{LeliaOrange} 6. Budgetvorschlag für das kommende Jahr}
+    \rule{\textwidth}{0.4pt}
+    \vspace{1cm}
+    $budget_proposal$
   \end{adjustwidth}
 }
 
@@ -177,6 +190,7 @@
       };
     \end{tikzpicture}
     \restoregeometry
+    \thispagestyle{empty} % No page number on cover
   \end{titlepage}
 }
 
@@ -189,4 +203,5 @@
 \printsectionthree
 \printsectionfour
 \printsectionfive
+\printsectionsix
 \end{document}

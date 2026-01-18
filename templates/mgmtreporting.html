@@ -163,20 +163,14 @@
                     <thead>
                         <tr>
                             <th>Konto</th>
-                            <th class="text-right">Vorjahr (CHF)</th>
-                            <th class="text-right">Aktuell (CHF)</th>
+                            <th class="text-right">Betrag (CHF)</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for key, value in aktiva.items() %}
                         <tr class="data-row">
                             <td>{{ key }}</td>
-                            {% if value is number %}
-                                <td class="text-right" colspan="2">{{ value | currency }}</td>
-                            {% else %}
-                                <td class="text-right">{{ value[0] | currency }}</td>
-                                <td class="text-right">{{ value[1] | currency }}</td>
-                            {% endif %}
+                            <td class="text-right">{{ value | currency }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -187,20 +181,14 @@
                     <thead>
                         <tr>
                             <th>Konto</th>
-                            <th class="text-right">Vorjahr (CHF)</th>
-                            <th class="text-right">Aktuell (CHF)</th>
+                            <th class="text-right">Betrag (CHF)</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for key, value in passiva.items() %}
                         <tr class="data-row">
                             <td>{{ key }}</td>
-                            {% if value is number %}
-                                <td class="text-right" colspan="2">{{ value | currency }}</td>
-                            {% else %}
-                                <td class="text-right">{{ value[0] | currency }}</td>
-                                <td class="text-right">{{ value[1] | currency }}</td>
-                            {% endif %}
+                            <td class="text-right">{{ value | currency }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -228,6 +216,18 @@
                     </p>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- SECTION 6: Budget Proposal -->
+    <!-- ============================================== -->
+    <section class="py-20 px-8 lg:px-20 bg-gray-50">
+        <h2 class="text-4xl font-bold mb-12 accent-text border-b pb-4 border-gray-300">
+            6. Budgetvorschlag für das kommende Jahr
+        </h2>
+        <div class="prose max-w-none">
+            {{ budget_proposal_html | markdown | safe }}
         </div>
     </section>
 
