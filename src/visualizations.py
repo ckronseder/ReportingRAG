@@ -22,13 +22,12 @@ def create_waterfall_chart(x_labels, y_values, measures, colors=None):
         text = text_labels,
         textposition = "outside",
         connector = {"line":{"color":"rgb(63, 63, 63)"}},
-        increasing = {"marker":{"color":"#3CB371"}}, # MediumSeaGreen for positive changes
+        increasing = {"marker":{"color":"#2E6F40"}}, # ForrestGreen for positive changes
         decreasing = {"marker":{"color":"#DC143C"}}, # Crimson for negative changes
-        totals = {"marker":{"color":"#4682B4"}},     # SteelBlue for total bars
+        totals = {"marker":{"color":"#3CB371"}},     # SteelBlue for total bars
     ))
 
     fig.update_layout(
-        title = "Erfolgsrechnung",
         showlegend = False # Typically no legend needed for simple waterfall
     )
 

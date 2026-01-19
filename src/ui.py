@@ -5,38 +5,17 @@ import os
 import base64
 import locale
 from datetime import datetime
-import pypandoc
-import tempfile
-import re
-import unicodedata # Import unicodedata
 from visualizations import create_waterfall_chart
 import markdown
-
-def escape_latex(text):
-    """
-    Escape special LaTeX characters in a string meant for text content.
-    Also normalizes Unicode to NFC.
-    """
-    if not isinstance(text, str):
-        return text
-    
-    # Normalize to NFC to handle precomposed characters better
-    text = unicodedata.normalize('NFC', text)
-
-    conv = { # Corrected syntax here
-        '&': r'\&',
-        '%': r'\%',
-        '$': r'\$',
-        '#': r'\#',
-        '_': r'\_',
-        '{': r'\{',
-        '}': r'\}',
-        '~': r'\textasciitilde{}',
-        '^': r'\textasciicircum{}',
-        '\\': r'\textbackslash{}',
-    }
-    regex = re.compile('|'.join(re.escape(key) for key in sorted(conv.keys(), key=lambda item: - len(item))))
-    return regex.sub(lambda match: conv[match.group()], text)
+import re
+from io import BytesIO
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import landscape, A4
+import tempfile
 
 def image_to_base64(path):
     """Converts an image file to a Base64 string."""
@@ -54,208 +33,303 @@ def format_currency(value):
     except (ValueError, TypeError):
         return value
 
-def _get_waterfall_chart_data(full_financial_data, for_latex=False):
+def _get_waterfall_chart_data(full_financial_data):
     """
-    Extracts data for the waterfall chart from the 'Aufwand' dictionary,
-    showing a simplified, high-level breakdown.
-    If for_latex is True, labels will be escaped for LaTeX.
+    Extracts data for a P&L waterfall chart, flowing from income to net result.
     """
     waterfall_x = []
     waterfall_y = []
     waterfall_measure = []
 
+    ertraege_data = full_financial_data.get("Erträge", {})
     aufwand_data = full_financial_data.get("Aufwand", {})
-    if not aufwand_data:
-        st.warning("Aufwand data not available for waterfall chart.")
-        return [], [], []
 
-    # Define the keys for the main total and the final result
+    # Define the keys for the main totals and the final result
+    ERTRAEGE_KEY = "Erträge aus Vermietung ohne MWST"
     AUFWANDE_KEY = "Aufwände"
     FINAL_RESULT_KEY = "Abschluss Erfolgsrechnung"
 
-    # Ensure the main 'Aufwände' total exists
-    if AUFWANDE_KEY not in aufwand_data:
-        st.warning(f"'{AUFWANDE_KEY}' not found in Aufwand data.")
+    # 1. Start with Total Income
+    if ERTRAEGE_KEY not in ertraege_data:
+        st.warning(f"'{ERTRAEGE_KEY}' not found in Erträge data. Cannot build waterfall chart.")
         return [], [], []
-
-    # 1. Add the main "Aufwände" total as the starting absolute bar
-    aufwande_total_value = aufwand_data[AUFWANDE_KEY]
-    waterfall_x.append(escape_latex(AUFWANDE_KEY) if for_latex else AUFWANDE_KEY)
-    waterfall_y.append(aufwande_total_value)
+    
+    # Ensure the starting income value is positive
+    ertraege_total_value = abs(ertraege_data[ERTRAEGE_KEY])
+    waterfall_x.append("Erträge") # Renamed label
+    waterfall_y.append(ertraege_total_value)
     waterfall_measure.append("absolute")
 
-    # 2. Add the breakdown categories (keys without numbers) as relative bars
-    for key, value in aufwand_data.items():
-        # Skip the main total and the final result keys
-        if key == AUFWANDE_KEY or key == FINAL_RESULT_KEY:
-            continue
-        
-        # Add keys that do NOT contain numeric characters
-        if not re.search(r'\d', key):
-            waterfall_x.append(escape_latex(key) if for_latex else key)
-            waterfall_y.append(-value) # Negative for breakdown
-            waterfall_measure.append("relative")
+    # 2. Subtract main expense categories from "Aufwand"
+    if not aufwand_data:
+        st.warning("Aufwand data not available for waterfall chart.")
+    else:
+        for key, value in aufwand_data.items():
+            # Skip the main total and the final result keys
+            if key == AUFWANDE_KEY or key == FINAL_RESULT_KEY:
+                continue
+            
+            # Only subtract main expense categories (those without a 4-digit code)
+            if not re.search(r'[0-9]{4}', key):
+                waterfall_x.append(key)
+                waterfall_y.append(-value) # Negative for breakdown
+                waterfall_measure.append("relative")
 
     # 3. Add the final result bar
     if FINAL_RESULT_KEY in aufwand_data:
         final_result_value = aufwand_data[FINAL_RESULT_KEY]
-        waterfall_x.append(escape_latex(FINAL_RESULT_KEY) if for_latex else FINAL_RESULT_KEY)
+        waterfall_x.append("Gewinn") # Renamed label
         waterfall_y.append(final_result_value)
         waterfall_measure.append("total")
-    
+    else:
+        st.warning(f"'{FINAL_RESULT_KEY}' not found in Aufwand data. Waterfall chart will be incomplete.")
+
     return waterfall_x, waterfall_y, waterfall_measure
 
-
-def generate_pdf_with_pandoc(report_title, image_file, dynamic_date_range, dynamic_primary_market_area, full_financial_data):
-    """Generates a full PDF report using Pandoc and a LaTeX template."""
-    template_path = os.path.join('../templates', 'report_template.tex')
-    logo_path = os.path.abspath(os.path.join('../templates', 'LELIA_LOGO_L_W.png'))
+def _create_financial_table(data_dict, headers, table_width, styles):
+    """Creates a styled ReportLab table from a financial data dictionary."""
+    table_data = []
     
-    temp_template_path = None
+    # Prepare header row with Paragraphs
+    header_row = [Paragraph(headers[0], styles['TableHeaderLeft']), Paragraph(headers[1], styles['TableHeaderRight'])]
+    table_data.append(header_row)
+
+    for key, value in data_dict.items():
+        formatted_value = format_currency(value)
+        
+        # Condition for bolding: if the key does NOT contain a sequence of four digits
+        is_bold = not bool(re.search(r'[0-9]{4}', key))
+
+        if is_bold:
+            key_paragraph = Paragraph(key, styles['BodyBoldSmallLeft'])
+            value_paragraph = Paragraph(formatted_value, styles['BodyBoldSmallRight'])
+        else:
+            key_paragraph = Paragraph(key, styles['BodySmallLeft'])
+            value_paragraph = Paragraph(formatted_value, styles['BodySmallRight'])
+        
+        table_data.append([key_paragraph, value_paragraph])
+    
+    col_widths = [table_width * 0.66, table_width * 0.34]
+    
+    table = Table(table_data, colWidths=col_widths)
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.white), # Entire table background white
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('LEFTPADDING', (0, 1), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 1), (-1, -1), 2),
+        ('TOPPADDING', (0, 1), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 2),
+        ('LINEBELOW', (0,0), (-1,0), 1, colors.black), # Line below header
+    ])
+    table.setStyle(style)
+    return table
+
+def _add_page_footer(canvas, doc, logo_path):
+    """Adds a footer with logo and page number to each page."""
+    canvas.saveState()
+    
+    # Draw logo on the left
+    if os.path.exists(logo_path):
+        canvas.drawImage(logo_path, doc.leftMargin, 0.25 * inch, width=0.8*inch, height=0.8*inch, preserveAspectRatio=True, mask='auto')
+
+    # Draw page number on the right
+    canvas.setFont('Helvetica', 9)
+    page_number_text = f"Seite {doc.page}"
+    canvas.drawRightString(doc.width + doc.leftMargin, 0.35 * inch, page_number_text)
+    
+    canvas.restoreState()
+
+def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dynamic_primary_market_area):
+    """Generates a PDF report using ReportLab."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=inch/2, leftMargin=inch/2, topMargin=inch/2, bottomMargin=inch/2)
+    
+    styles = getSampleStyleSheet()
+    
+    # Define LeliaOrange
+    LeliaOrange = colors.HexColor('#ff6b00')
+
+    # Modify existing Title style
+    styles['Title'].fontName = 'Helvetica-Bold'
+    styles['Title'].fontSize = 24
+    styles['Title'].alignment = TA_CENTER
+    styles['Title'].spaceAfter = 14
+
+    # Add custom styles
+    styles.add(ParagraphStyle(name='Date', fontName='Helvetica', fontSize=12, alignment=TA_CENTER, spaceAfter=20))
+    styles.add(ParagraphStyle(name='H1', fontName='Helvetica-Bold', fontSize=18, spaceBefore=20, spaceAfter=10))
+    styles.add(ParagraphStyle(name='H2', fontName='Helvetica-Bold', fontSize=14, spaceBefore=10, spaceAfter=5))
+    styles.add(ParagraphStyle(name='Body', fontName='Helvetica', fontSize=10, leading=14))
+    styles.add(ParagraphStyle(name='Quote', fontName='Helvetica-Oblique', fontSize=12, leading=14, leftIndent=20, rightIndent=20, spaceBefore=10, spaceAfter=10))
+    
+    # New styles for financial tables
+    styles.add(ParagraphStyle(name='BodySmallLeft', fontName='Helvetica', fontSize=8, leading=10, alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='BodyBoldSmallLeft', fontName='Helvetica-Bold', fontSize=8, leading=10, alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='BodySmallRight', fontName='Helvetica', fontSize=8, leading=10, alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name='BodyBoldSmallRight', fontName='Helvetica-Bold', fontSize=8, leading=10, alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name='TableHeaderLeft', fontName='Helvetica-Bold', fontSize=10, textColor=LeliaOrange, alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='TableHeaderRight', fontName='Helvetica-Bold', fontSize=10, textColor=LeliaOrange, alignment=TA_RIGHT))
+
+
+    story = []
     chart_filename = None
-    output_filename = None
     hero_image_path = None
 
     try:
-        # Save uploaded image to a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(image_file.name)[1]) as tmp_image:
-            tmp_image.write(image_file.getbuffer())
+        # --- Robust Path Construction ---
+        script_dir = os.path.dirname(__file__)
+        templates_dir = os.path.abspath(os.path.join(script_dir, '..', 'templates'))
+        logo_path = os.path.join(templates_dir, 'LELIA_LOGO_L_O.png')
+
+        # --- Title Page ---
+        if os.path.exists(logo_path):
+            logo = Image(logo_path, width=2.6*inch, height=1.3*inch)
+            logo.hAlign = 'CENTER'
+            story.append(logo)
+            story.append(Spacer(1, 0.25*inch))
+
+        story.append(Paragraph(dynamic_primary_market_area, styles['Title'])) # Use dynamic_primary_market_area as the main title
+        story.append(Paragraph(dynamic_date_range, styles['Date']))
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_image:
+            tmp_image.write(image_file.getvalue())
             hero_image_path = tmp_image.name
+        
+        hero_image = Image(hero_image_path, width=7*inch, height=3.75*inch)
+        hero_image.hAlign = 'CENTER'
+        story.append(hero_image)
+        story.append(Spacer(1, 0.5*inch))
 
-        # --- Waterfall Chart Data Extraction ---
-        waterfall_x, waterfall_y, waterfall_measure = _get_waterfall_chart_data(full_financial_data, for_latex=True)
+        story.append(Paragraph(st.session_state.get('generated_blockquote', "..."), styles['Quote']))
+        story.append(PageBreak())
 
-        # --- Create and save the waterfall chart ---
-        waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure)
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_chart:
-            chart_filename = tmp_chart.name
-            waterfall_fig.write_image(chart_filename, scale=2)
+        # --- Executive Summary ---
+        story.append(Paragraph("Zusammenfassung", styles['H1']))
+        story.append(Paragraph(st.session_state.get('generated_summary', "..."), styles['Body']))
+        story.append(Spacer(1, 0.25*inch))
 
-        # --- Prepare Table LaTeX Strings using Pandas ---
+        # --- Financial Tables ---
         ertraege_data = full_financial_data.get('Erträge', {})
         aufwand_data = full_financial_data.get('Aufwand', {})
         aktiva_data = full_financial_data.get('Aktiva', {})
         passiva_data = full_financial_data.get('Passiva', {})
 
-        def df_to_latex(df, column_format, numeric_columns):
-            lines = []
-            # Use tabularx for auto-wrapping text columns
-            new_column_format = column_format.replace('l', 'X', 1)
-            lines.append(f"\\begin{{tabularx}}{{\\linewidth}}{{{new_column_format}}}")
-            
-            header = " & ".join([f"\\textbf{{{escape_latex(col)}}}" for col in df.columns]) + " \\\\"
-            lines.append("\\toprule")
-            lines.append(header)
-            lines.append("\\midrule")
+        # Calculate available width for two tables side-by-side
+        available_width = doc.width # This is the content width of the page
+        table_half_width = (available_width - 0.25*inch) / 2 # Subtract some space for gap between tables
 
-            for i, row in df.iterrows():
-                is_bold_row = isinstance(row.iloc[0], str) and not re.search(r'\d', row.iloc[0])
-                if is_bold_row and i > 0:
-                    lines.append("\\midrule")
+        # --- Erfolgsrechnung Section ---
+        story.append(PageBreak())
+        story.append(Paragraph("Erfolgsrechnung", styles['H1']))
 
-                row_values = []
-                for j, col_name in enumerate(df.columns):
-                    cell_value = row.iloc[j]
-                    formatted_cell = ''
-                    if col_name in numeric_columns and pd.notna(cell_value):
-                        formatted_cell = f"{cell_value:,.2f}"
-                    elif pd.notna(cell_value):
-                        formatted_cell = escape_latex(str(cell_value))
-                    
-                    if is_bold_row:
-                        formatted_cell = f"{{\\bfseries {formatted_cell}}}"
-                    row_values.append(formatted_cell)
-                
-                row_str = " & ".join(row_values) + " \\\\"
-                if not is_bold_row:
-                    row_str = f"\\small {row_str}"
-                lines.append(row_str)
+        # Create individual tables with calculated widths
+        ertraege_table = _create_financial_table(ertraege_data, ['Beschreibung', 'Betrag (CHF)'], table_half_width, styles)
+        aufwand_table = _create_financial_table(aufwand_data, ['Beschreibung', 'Betrag (CHF)'], table_half_width, styles)
 
-            lines.append("\\bottomrule")
-            lines.append("\\end{tabularx}")
-            return "\n".join(lines)
+        # Create a table to hold the H2 titles
+        h2_titles_data_erfolgsrechnung = [
+            [Paragraph("Erträge", styles['H2']), Paragraph("Aufwand", styles['H2'])]
+        ]
+        h2_titles_table_erfolgsrechnung = Table(h2_titles_data_erfolgsrechnung, colWidths=[table_half_width, table_half_width])
+        h2_titles_table_erfolgsrechnung.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LEFTPADDING', (0,0), (0,0), 0),
+            ('RIGHTPADDING', (0,0), (0,0), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+        ]))
+        story.append(h2_titles_table_erfolgsrechnung)
+        story.append(Spacer(1, 0.1*inch)) # Small spacer between H2 titles and tables
 
-        ertraege_df = pd.DataFrame(list(ertraege_data.items()), columns=['Beschreibung', 'Betrag (CHF)'])
-        aufwand_df = pd.DataFrame(list(aufwand_data.items()), columns=['Beschreibung', 'Betrag (CHF)'])
-        aktiva_df = pd.DataFrame(list(aktiva_data.items()), columns=['Konto', 'Betrag (CHF)'])
-        passiva_df = pd.DataFrame(list(passiva_data.items()), columns=['Konto', 'Betrag (CHF)'])
+        # Create a table to hold the two financial tables side-by-side
+        combined_erfolgsrechnung_data = [[ertraege_table, aufwand_table]]
+        combined_erfolgsrechnung_table = Table(combined_erfolgsrechnung_data, colWidths=[table_half_width, table_half_width])
+        combined_erfolgsrechnung_table.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LEFTPADDING', (0,0), (0,0), 0),
+            ('RIGHTPADDING', (0,0), (0,0), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+        ]))
+        story.append(combined_erfolgsrechnung_table)
+        story.append(Spacer(1, 0.25*inch)) # Spacer after the combined tables
 
-        ertraege_table_tex = df_to_latex(ertraege_df, "lr", ['Betrag (CHF)'])
-        aufwand_table_tex = df_to_latex(aufwand_df, "lr", ['Betrag (CHF)'])
-        aktiva_table_tex = df_to_latex(aktiva_df, "lr", ['Betrag (CHF)'])
-        passiva_table_tex = df_to_latex(passiva_df, "lr", ['Betrag (CHF)'])
+        # --- Bilanz Section ---
+        story.append(PageBreak())
+        story.append(Paragraph("Bilanz", styles['H1']))
 
-        # --- Pre-process Template ---
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template_content = f.read()
+        aktiva_table = _create_financial_table(aktiva_data, ['Konto', 'Betrag (CHF)'], table_half_width, styles)
+        passiva_table = _create_financial_table(passiva_data, ['Konto', 'Betrag (CHF)'], table_half_width, styles)
 
-        template_content = template_content.replace('$ertraege_table$', ertraege_table_tex)
-        template_content = template_content.replace('$aufwand_table$', aufwand_table_tex)
-        template_content = template_content.replace('$aktiva_table$', aktiva_table_tex)
-        template_content = template_content.replace('$passiva_table$', passiva_table_tex)
+        h2_titles_data_bilanz = [
+            [Paragraph("Aktiva", styles['H2']), Paragraph("Passiva", styles['H2'])]
+        ]
+        h2_titles_table_bilanz = Table(h2_titles_data_bilanz, colWidths=[table_half_width, table_half_width])
+        h2_titles_table_bilanz.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LEFTPADDING', (0,0), (0,0), 0),
+            ('RIGHTPADDING', (0,0), (0,0), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+        ]))
+        story.append(h2_titles_table_bilanz)
+        story.append(Spacer(1, 0.1*inch))
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.tex', mode='w', encoding='utf-8') as tmp_template:
-            tmp_template.write(template_content)
-            temp_template_path = tmp_template.name
+        combined_bilanz_data = [[aktiva_table, passiva_table]]
+        combined_bilanz_table = Table(combined_bilanz_data, colWidths=[table_half_width, table_half_width])
+        combined_bilanz_table.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LEFTPADDING', (0,0), (0,0), 0),
+            ('RIGHTPADDING', (0,0), (0,0), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+        ]))
+        story.append(combined_bilanz_table)
+        story.append(Spacer(1, 0.25*inch))
 
-        # --- Set up Pandoc Metadata (excluding tables) ---
-        budget_proposal_latex = pypandoc.convert_text(
-            st.session_state.get('generated_budget', "..."), 'latex', format='md', extra_args=['--wrap=none']
-        )
+        # --- Waterfall Chart ---
+        story.append(PageBreak())
+        story.append(Paragraph("Finanzanalyse", styles['H1']))
+        waterfall_x, waterfall_y, waterfall_measure = _get_waterfall_chart_data(full_financial_data)
+        waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure)
         
-        markdown_content = "" 
-        metadata = {
-            'title': escape_latex(dynamic_primary_market_area),
-            'author': '',
-            'date': escape_latex(dynamic_date_range),
-            'logo': logo_path,
-            'heroimage': hero_image_path,
-            'blockquote': escape_latex(st.session_state.get('generated_blockquote', "Der Markt erlebte im letzten Quartal eine beispiellose Liquidität...")),
-            'executivesummary': escape_latex(st.session_state.get('generated_summary', "Dank eines günstigen wirtschaftlichen Umfelds...")),
-            'kpi1_title': escape_latex("Gesamtverkaufsvolumen"),
-            'kpi1_value': escape_latex("CHF 1.2 Mrd."),
-            'kpi1_desc': escape_latex("Bruttowert aller abgeschlossenen Transaktionen..."),
-            'kpi2_title': escape_latex("J-O-J Volumenänderung"),
-            'kpi2_value': escape_latex("+18.5%"),
-            'kpi2_desc': escape_latex("Stärkstes Q4-Wachstum seit fünf Jahren."),
-            'kpi3_title': escape_latex("Durchschnittspreis/m²"),
-            'kpi3_value': escape_latex("CHF 1,850"),
-            'kpi3_desc': escape_latex("Schlüsselindikator für Marktgesundheit..."),
-            'waterfall_chart': chart_filename,
-            'waterfall_explanation': escape_latex(st.session_state.get('waterfall_explanation', "...")),
-            'budget_proposal': budget_proposal_latex,
-        }
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_chart:
+            chart_filename = tmp_chart.name
+            waterfall_fig.write_image(chart_filename, scale=2)
         
-        pandoc_args = ['--template', temp_template_path, '--pdf-engine=pdflatex']
-        for key, value in metadata.items():
-            pandoc_args.extend([f'--metadata={key}:{value}'])
+        chart_image = Image(chart_filename, width=7*inch, height=4*inch)
+        chart_image.hAlign = 'CENTER'
+        story.append(chart_image)
+        story.append(Spacer(1, 0.25*inch))
+        story.append(Paragraph("Detaillierte Erklärung", styles['H2']))
+        story.append(Paragraph(st.session_state.get('waterfall_explanation', "..."), styles['Body']))
 
-        # --- Generate PDF ---
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_pdf:
-            output_filename = tmp_pdf.name
+        # --- Budget Proposal ---
+        story.append(PageBreak())
+        story.append(Paragraph("Budgetvorschlag für das kommende Jahr", styles['H1']))
+        story.append(Paragraph(st.session_state.get('generated_budget', "..."), styles['Body']))
 
-        pypandoc.convert_text(markdown_content, 'pdf', format='md', outputfile=output_filename, extra_args=pandoc_args)
-        
-        with open(output_filename, 'rb') as f:
-            pdf_bytes = f.read()
-            
-        return pdf_bytes
-
+        doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=lambda c, d: _add_page_footer(c, d, logo_path))
     finally:
-        # --- Cleanup ---
-        if temp_template_path and os.path.exists(temp_template_path):
-            os.remove(temp_template_path)
-        if chart_filename and os.path.exists(chart_filename):
-            os.remove(chart_filename)
-        if output_filename and os.path.exists(output_filename):
-            os.remove(output_filename)
+        # Clean up temporary files
         if hero_image_path and os.path.exists(hero_image_path):
             os.remove(hero_image_path)
+        if chart_filename and os.path.exists(chart_filename):
+            os.remove(chart_filename)
+
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def display_html_report(report_title, image_file, full_financial_data):
     """
-    Displays the HTML report and provides a PDF download button using Pandoc.
+    Displays the HTML report.
     """
     dynamic_date_range = "Daten nicht verfügbar"
     if "Erfolgsrechnung" in full_financial_data and not full_financial_data["Erfolgsrechnung"].empty:
@@ -276,7 +350,7 @@ def display_html_report(report_title, image_file, full_financial_data):
             st.warning("Could not extract primary market area from Erfolgsrechnung. Using default.")
 
     # --- Waterfall Chart Data Extraction for HTML ---
-    waterfall_x, waterfall_y, waterfall_measure = _get_waterfall_chart_data(full_financial_data, for_latex=False)
+    waterfall_x, waterfall_y, waterfall_measure = _get_waterfall_chart_data(full_financial_data)
 
     waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure)
     waterfall_html = waterfall_fig.to_html(full_html=False, include_plotlyjs='cdn')
@@ -334,7 +408,7 @@ def display_html_report(report_title, image_file, full_financial_data):
     with st.sidebar:
         st.subheader("PDF Report Download")
         try:
-            pdf_bytes = generate_pdf_with_pandoc(report_title, image_file, dynamic_date_range, dynamic_primary_market_area, full_financial_data)
+            pdf_bytes = pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dynamic_primary_market_area)
             st.download_button(
                 label="Download PDF Report",
                 data=pdf_bytes,

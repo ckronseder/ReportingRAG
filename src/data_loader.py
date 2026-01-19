@@ -202,7 +202,7 @@ def load_financial_data(uploaded_file):
     if "Bilanz" in xls.sheet_names:
         bilanz_df = pd.read_excel(xls, "Bilanz", header=None)
         processed_bilanz_df = process_dataframe(bilanz_df)
-        # financial_data["Bilanz"] = processed_bilanz_df
+        financial_data["Bilanz"] = processed_bilanz_df.astype(str).replace('nan', '')
         
         aktiva, passiva = parse_bilanz(processed_bilanz_df)
         financial_data["Aktiva"] = aktiva
@@ -211,10 +211,13 @@ def load_financial_data(uploaded_file):
     if "Erfolgsrechnung" in xls.sheet_names:
         erfolgsrechnung_df = pd.read_excel(xls, "Erfolgsrechnung", header=None)
         processed_erfolgsrechnung_df = process_dataframe(erfolgsrechnung_df)
-        financial_data["Erfolgsrechnung"] = processed_erfolgsrechnung_df
         
         ertraege, aufwand = parse_erfolgsrechnung(processed_erfolgsrechnung_df)
         financial_data["Erträge"] = ertraege
         financial_data["Aufwand"] = aufwand
+        
+        # For display purposes, convert all data to strings to avoid mixed-type columns
+        # that can cause issues with Arrow serialization in Streamlit.
+        financial_data["Erfolgsrechnung"] = processed_erfolgsrechnung_df.astype(str).replace('nan', '')
         
     return financial_data
