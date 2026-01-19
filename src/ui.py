@@ -130,14 +130,19 @@ def _add_page_footer(canvas, doc, logo_path):
     """Adds a footer with logo and page number to each page."""
     canvas.saveState()
     
-    # Draw logo on the left
+    # Draw separator line
+    line_y = doc.bottomMargin + 0.1 * inch
+    canvas.setStrokeColorRGB(0, 0, 0)
+    canvas.line(doc.leftMargin, line_y, doc.width + doc.leftMargin, line_y)
+
+    # Draw logo on the left, below the line
     if os.path.exists(logo_path):
-        canvas.drawImage(logo_path, doc.leftMargin, 0.25 * inch, width=0.8*inch, height=0.8*inch, preserveAspectRatio=True, mask='auto')
+        canvas.drawImage(logo_path, doc.leftMargin, 0.1 * inch, width=0.6*inch, height=0.6*inch, preserveAspectRatio=True, mask='auto')
 
     # Draw page number on the right
     canvas.setFont('Helvetica', 9)
     page_number_text = f"Seite {doc.page}"
-    canvas.drawRightString(doc.width + doc.leftMargin, 0.35 * inch, page_number_text)
+    canvas.drawRightString(doc.width + doc.leftMargin, 0.2 * inch, page_number_text)
     
     canvas.restoreState()
 
@@ -162,7 +167,7 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
     styles.add(ParagraphStyle(name='H1', fontName='Helvetica-Bold', fontSize=18, spaceBefore=20, spaceAfter=10))
     styles.add(ParagraphStyle(name='H2', fontName='Helvetica-Bold', fontSize=14, spaceBefore=10, spaceAfter=5))
     styles.add(ParagraphStyle(name='Body', fontName='Helvetica', fontSize=10, leading=14))
-    styles.add(ParagraphStyle(name='Quote', fontName='Helvetica-Oblique', fontSize=12, leading=14, leftIndent=20, rightIndent=20, spaceBefore=10, spaceAfter=10))
+    styles.add(ParagraphStyle(name='Quote', fontName='Helvetica-BoldOblique', fontSize=12, leading=14, leftIndent=20, rightIndent=20, spaceBefore=10, spaceAfter=10))
     
     # New styles for financial tables
     styles.add(ParagraphStyle(name='BodySmallLeft', fontName='Helvetica', fontSize=8, leading=10, alignment=TA_LEFT))
@@ -200,13 +205,13 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
         hero_image = Image(hero_image_path, width=7*inch, height=3.75*inch)
         hero_image.hAlign = 'CENTER'
         story.append(hero_image)
-        story.append(Spacer(1, 0.5*inch))
-
-        story.append(Paragraph(st.session_state.get('generated_blockquote', "..."), styles['Quote']))
         story.append(PageBreak())
 
         # --- Executive Summary ---
         story.append(Paragraph("Zusammenfassung", styles['H1']))
+        story.append(Spacer(1, 0.2*inch))
+        story.append(Paragraph(st.session_state.get('generated_blockquote', "..."), styles['Quote']))
+        story.append(Spacer(1, 0.2*inch))
         story.append(Paragraph(st.session_state.get('generated_summary', "..."), styles['Body']))
         story.append(Spacer(1, 0.25*inch))
 
