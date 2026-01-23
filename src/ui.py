@@ -45,17 +45,27 @@ def _get_waterfall_chart_data(full_financial_data):
     aufwand_data = full_financial_data.get("Aufwand", {})
 
     # Define the keys for the main totals and the final result
-    ERTRAEGE_KEY = "Erträge aus Vermietung ohne MWST"
+    POSSIBLE_ERTRAEGE_KEYS = [
+        "Erträge aus Vermietung ohne MWST",
+        "Erträge aus Vermietung",
+        "Erträge"
+    ]
     AUFWANDE_KEY = "Aufwände"
     FINAL_RESULT_KEY = "Abschluss Erfolgsrechnung"
 
-    # 1. Start with Total Income
-    if ERTRAEGE_KEY not in ertraege_data:
-        st.warning(f"'{ERTRAEGE_KEY}' not found in Erträge data. Cannot build waterfall chart.")
-        return [], [], []
+    # 1. Find and start with Total Income
+    ertraege_key_found = None
+    for key in POSSIBLE_ERTRAEGE_KEYS:
+        if key in ertraege_data:
+            ertraege_key_found = key
+            break
     
+    if ertraege_key_found is None:
+        st.warning(f"Could not find a valid income key in Erträge data. Cannot build waterfall chart.")
+        return [], [], []
+
     # Ensure the starting income value is positive
-    ertraege_total_value = abs(ertraege_data[ERTRAEGE_KEY])
+    ertraege_total_value = abs(ertraege_data[ertraege_key_found])
     waterfall_x.append("Erträge") # Renamed label
     waterfall_y.append(ertraege_total_value)
     waterfall_measure.append("absolute")
@@ -99,8 +109,12 @@ def _create_financial_table(data_dict, headers, table_width, styles):
         
         # Condition for bolding: if the key does NOT contain a sequence of four digits
         is_bold = not bool(re.search(r'[0-9]{4}', key))
-
-        if is_bold:
+        
+        # Special condition for "Abschluss Erfolgsrechnung"
+        if key == "Abschluss Erfolgsrechnung":
+            key_paragraph = Paragraph(key, styles['OrangeBodyBoldSmallLeft'])
+            value_paragraph = Paragraph(formatted_value, styles['OrangeBodyBoldSmallRight'])
+        elif is_bold:
             key_paragraph = Paragraph(key, styles['BodyBoldSmallLeft'])
             value_paragraph = Paragraph(formatted_value, styles['BodyBoldSmallRight'])
         else:
@@ -146,6 +160,24 @@ def _add_page_footer(canvas, doc, logo_path):
     
     canvas.restoreState()
 
+def markdown_to_flowables(md_text, styles):
+    """Converts a markdown string to a list of ReportLab Flowables."""
+    flowables = []
+    for line in md_text.split('\n'):
+        line = line.strip()
+        if line.startswith('- '):
+            # Use the existing 'Bullet' style and remove the markdown character
+            flowables.append(Paragraph(line[2:], styles['Bullet']))
+        elif line.startswith('**') and line.endswith('**'):
+            # Use <b> tags for bold
+            flowables.append(Paragraph(f"<b>{line[2:-2]}</b>", styles['Body']))
+        elif line.startswith('*') and line.endswith('*'):
+            # Use <i> tags for italic
+            flowables.append(Paragraph(f"<i>{line[1:-1]}</i>", styles['Body']))
+        elif line: # Handle non-empty lines
+            flowables.append(Paragraph(line, styles['Body']))
+    return flowables
+
 def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dynamic_primary_market_area):
     """Generates a PDF report using ReportLab."""
     buffer = BytesIO()
@@ -176,6 +208,10 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
     styles.add(ParagraphStyle(name='BodyBoldSmallRight', fontName='Helvetica-Bold', fontSize=8, leading=10, alignment=TA_RIGHT))
     styles.add(ParagraphStyle(name='TableHeaderLeft', fontName='Helvetica-Bold', fontSize=10, textColor=LeliaOrange, alignment=TA_LEFT))
     styles.add(ParagraphStyle(name='TableHeaderRight', fontName='Helvetica-Bold', fontSize=10, textColor=LeliaOrange, alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name='KpiValue', fontName='Helvetica-Bold', fontSize=24, textColor=LeliaOrange, alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='KpiTitle', fontName='Helvetica', fontSize=10, alignment=TA_LEFT, spaceBefore=10))
+    styles.add(ParagraphStyle(name='OrangeBodyBoldSmallLeft', fontName='Helvetica-Bold', fontSize=8, leading=10, alignment=TA_LEFT, textColor=LeliaOrange))
+    styles.add(ParagraphStyle(name='OrangeBodyBoldSmallRight', fontName='Helvetica-Bold', fontSize=8, leading=10, alignment=TA_RIGHT, textColor=LeliaOrange))
 
 
     story = []
@@ -190,7 +226,7 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
 
         # --- Title Page ---
         if os.path.exists(logo_path):
-            logo = Image(logo_path, width=2.6*inch, height=1.3*inch)
+            logo = Image(logo_path, width=3*inch, height=1.5*inch)
             logo.hAlign = 'CENTER'
             story.append(logo)
             story.append(Spacer(1, 0.25*inch))
@@ -207,13 +243,36 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
         story.append(hero_image)
         story.append(PageBreak())
 
-        # --- Executive Summary ---
-        story.append(Paragraph("Zusammenfassung", styles['H1']))
+        # --- Executive Summary & KPIs ---
+        story.append(Paragraph("Zusammenfassung & KPIs", styles['H1']))
         story.append(Spacer(1, 0.2*inch))
-        story.append(Paragraph(st.session_state.get('generated_blockquote', "..."), styles['Quote']))
-        story.append(Spacer(1, 0.2*inch))
-        story.append(Paragraph(st.session_state.get('generated_summary', "..."), styles['Body']))
+
+        # Create KPI column
+        kpi_story = []
+        kpi_story.append(Paragraph("Leerstand (%)", styles['KpiTitle']))
+        kpi_story.append(Paragraph(f"{st.session_state.leerstand:.2f}%", styles['KpiValue']))
+        kpi_story.append(Spacer(1, 0.2*inch))
+        kpi_story.append(Paragraph("Rendite auf Eigenkapital (%)", styles['KpiTitle']))
+        kpi_story.append(Paragraph(f"{st.session_state.rendite_eigenkapital:.2f}%", styles['KpiValue']))
+        kpi_story.append(Spacer(1, 0.2*inch))
+        kpi_story.append(Paragraph("Durschnittliche Miete pro m2 (CHF)", styles['KpiTitle']))
+        kpi_story.append(Paragraph(f"{st.session_state.miete_pro_m2:.2f}", styles['KpiValue']))
+
+        # Create Summary column
+        summary_story = []
+        summary_story.append(Paragraph(st.session_state.get('generated_blockquote', "..."), styles['Quote']))
+        summary_story.append(Spacer(1, 0.2*inch))
+        summary_story.extend(markdown_to_flowables(st.session_state.generated_summary, styles))
+
+        # Combine into a two-column table
+        summary_table_data = [[summary_story, kpi_story]]
+        summary_table = Table(summary_table_data, colWidths=[doc.width * 0.7, doc.width * 0.3])
+        summary_table.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ]))
+        story.append(summary_table)
         story.append(Spacer(1, 0.25*inch))
+
 
         # --- Financial Tables ---
         ertraege_data = full_financial_data.get('Erträge', {})
@@ -228,6 +287,7 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
         # --- Erfolgsrechnung Section ---
         story.append(PageBreak())
         story.append(Paragraph("Erfolgsrechnung", styles['H1']))
+        story.append(Spacer(1, 0.2*inch)) # Added spacer
 
         # Create individual tables with calculated widths
         ertraege_table = _create_financial_table(ertraege_data, ['Beschreibung', 'Betrag (CHF)'], table_half_width, styles)
@@ -266,6 +326,7 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
         # --- Bilanz Section ---
         story.append(PageBreak())
         story.append(Paragraph("Bilanz", styles['H1']))
+        story.append(Spacer(1, 0.2*inch)) # Added spacer
 
         aktiva_table = _create_financial_table(aktiva_data, ['Konto', 'Betrag (CHF)'], table_half_width, styles)
         passiva_table = _create_financial_table(passiva_data, ['Konto', 'Betrag (CHF)'], table_half_width, styles)
@@ -313,12 +374,13 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
         story.append(chart_image)
         story.append(Spacer(1, 0.25*inch))
         story.append(Paragraph("Detaillierte Erklärung", styles['H2']))
-        story.append(Paragraph(st.session_state.get('waterfall_explanation', "..."), styles['Body']))
+        story.extend(markdown_to_flowables(st.session_state.waterfall_explanation, styles))
 
         # --- Budget Proposal ---
         story.append(PageBreak())
         story.append(Paragraph("Budgetvorschlag für das kommende Jahr", styles['H1']))
-        story.append(Paragraph(st.session_state.get('generated_budget', "..."), styles['Body']))
+        story.append(Spacer(1, 0.2*inch)) # Added spacer
+        story.extend(markdown_to_flowables(st.session_state.generated_budget, styles))
 
         doc.build(story, onFirstPage=lambda c, d: None, onLaterPages=lambda c, d: _add_page_footer(c, d, logo_path))
     finally:
@@ -401,10 +463,13 @@ def display_html_report(report_title, image_file, full_financial_data):
         'passiva': passiva_data,
         'current_year': datetime.now().year,
         'waterfall_chart_html': waterfall_html,
-        'blockquote': st.session_state.get('generated_blockquote', "..."),
-        'executivesummary': st.session_state.get('generated_summary', "..."),
-        'waterfall_explanation_html': st.session_state.get('waterfall_explanation', "Explanation of the waterfall chart will be generated here."),
-        'budget_proposal_html': st.session_state.get('generated_budget', "Budget proposal will be generated here."),
+        'blockquote': st.session_state.generated_blockquote,
+        'executivesummary': st.session_state.generated_summary,
+        'waterfall_explanation_html': st.session_state.waterfall_explanation,
+        'budget_proposal_html': st.session_state.generated_budget,
+        'leerstand': st.session_state.leerstand,
+        'rendite_eigenkapital': st.session_state.rendite_eigenkapital,
+        'miete_pro_m2': st.session_state.miete_pro_m2,
     }
 
     html_content = template.render(report_context)

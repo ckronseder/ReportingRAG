@@ -95,19 +95,16 @@
             </div>
             <div class="lg:col-span-1 space-y-6">
                 <div class="kpi-card bg-white p-6 rounded-xl border-t-4 accent-border">
-                    <p class="text-sm font-semibold uppercase text-gray-500 mb-1">Gesamtverkaufsvolumen</p>
-                    <h3 class="text-4xl font-extrabold accent-text">{{ total_sales_volume | default('CHF 1.2 Mrd.') }}</h3>
-                    <p class="text-sm text-gray-600 mt-2">Bruttowert aller abgeschlossenen Transaktionen im Markt.</p>
+                    <p class="text-sm font-semibold uppercase text-gray-500 mb-1">Leerstand (%)</p>
+                    <h3 class="text-4xl font-extrabold accent-text">{{ leerstand | round(2) }}%</h3>
                 </div>
                 <div class="kpi-card bg-white p-6 rounded-xl border-t-4 accent-border">
-                    <p class="text-sm font-semibold uppercase text-gray-500 mb-1">J-O-J Volumenänderung</p>
-                    <h3 class="text-4xl font-extrabold text-green-600">{{ volume_yoy_change | default('+18.5%') }}</h3>
-                    <p class="text-sm text-gray-600 mt-2">Stärkstes Q4-Wachstum seit fünf Jahren.</p>
+                    <p class="text-sm font-semibold uppercase text-gray-500 mb-1">Rendite auf Eigenkapital (%)</p>
+                    <h3 class="text-4xl font-extrabold accent-text">{{ rendite_eigenkapital | round(2) }}%</h3>
                 </div>
                 <div class="kpi-card bg-white p-6 rounded-xl border-t-4 accent-border">
-                    <p class="text-sm font-semibold uppercase text-gray-500 mb-1">Durchschnittspreis/m²</p>
-                    <h3 class="text-4xl font-extrabold accent-text">{{ avg_price_per_sqft | default('CHF 1,850') }}</h3>
-                    <p class="text-sm text-gray-600 mt-2">Schlüsselindikator für Marktgesundheit und Bewertungsstabilität.</p>
+                    <p class="text-sm font-semibold uppercase text-gray-500 mb-1">Durschnittliche Miete pro m2 (CHF)</p>
+                    <h3 class="text-4xl font-extrabold accent-text">{{ miete_pro_m2 | round(2) }}</h3>
                 </div>
             </div>
         </div>
