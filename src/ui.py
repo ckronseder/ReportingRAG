@@ -312,42 +312,6 @@ def pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dyna
         # Create a table to hold the two financial tables side-by-side
         combined_erfolgsrechnung_data = [[ertraege_table, aufwand_table]]
         combined_erfolgsrechnung_table = Table(combined_erfolgsrechnung_data, colWidths=[table_half_width, table_half_width])
-        combined_erfolgsrechnung_table.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('LEFTPADDING', (0,0), (0,0), 0),
-            ('RIGHTPADDING', (0,0), (0,0), 0),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-            ('TOPPADDING', (0,0), (-1,-1), 0),
-        ]))
-        story.append(combined_erfolgsrechnung_table)
-        story.append(Spacer(1, 0.25*inch)) # Spacer after the combined tables
-
-        # --- Bilanz Section ---
-        story.append(PageBreak())
-        story.append(Paragraph("Bilanz", styles['H1']))
-        story.append(Spacer(1, 0.2*inch)) # Added spacer
-
-        aktiva_table = _create_financial_table(aktiva_data, ['Konto', 'Betrag (CHF)'], table_half_width, styles)
-        passiva_table = _create_financial_table(passiva_data, ['Konto', 'Betrag (CHF)'], table_half_width, styles)
-
-        h2_titles_data_bilanz = [
-            [Paragraph("Aktiva", styles['H2']), Paragraph("Passiva", styles['H2'])]
-        ]
-        h2_titles_table_bilanz = Table(h2_titles_data_bilanz, colWidths=[table_half_width, table_half_width])
-        h2_titles_table_bilanz.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('LEFTPADDING', (0,0), (0,0), 0),
-            ('RIGHTPADDING', (0,0), (0,0), 0),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-            ('TOPPADDING', (0,0), (-1,-1), 0),
-        ]))
-        story.append(h2_titles_table_bilanz)
-        story.append(Spacer(1, 0.1*inch))
-
-        combined_bilanz_data = [[aktiva_table, passiva_table]]
-        combined_bilanz_table = Table(combined_bilanz_data, colWidths=[table_half_width, table_half_width])
         combined_bilanz_table.setStyle(TableStyle([
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -425,6 +389,7 @@ def display_html_report(report_title, image_file, full_financial_data):
     template_dir = '../templates'
     
     logo_path = os.path.join(template_dir, 'LELIA_LOGO_L_W.png')
+    css_path = os.path.join(template_dir    logo_path = os.path.join(template_dir, 'LELIA_LOGO_L_W.png')
     css_path = os.path.join(template_dir, 'tailwind.css')
 
     logo_base64 = image_to_base64(logo_path)
@@ -481,6 +446,7 @@ def display_html_report(report_title, image_file, full_financial_data):
             pdf_bytes = pdf_from_reportlab(image_file, full_financial_data, dynamic_date_range, dynamic_primary_market_area)
             st.download_button(
                 label="Download PDF Report",
+                icon=":material/build:",
                 data=pdf_bytes,
                 file_name="management_report.pdf",
                 mime="application/pdf"

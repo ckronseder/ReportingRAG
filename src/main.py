@@ -14,6 +14,8 @@ from ui import display_html_report
 from llm_handler import generate_summary_with_gemini, generate_waterfall_explanation, generate_budget_proposal
 
 # --- Session State Initialization ---
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 if 'report_generated' not in st.session_state:
     st.session_state.report_generated = False
 if 'full_financial_data' not in st.session_state:
@@ -36,6 +38,30 @@ if 'miete_pro_m2' not in st.session_state:
     st.session_state.miete_pro_m2 = 0.0
 
 
+def authenticate_user(username, password):
+    """Checks if the provided username and password match any in the secrets."""
+    for user_creds in st.secrets["credentials"]:
+        if user_creds["username"] == username and user_creds["password"] == password:
+            return True
+    return False
+
+def login_page():
+    """Displays the login form."""
+    st.title("Login")
+    username = st.text_input("Username", key="login_username")
+    password = st.text_input("Password", type="password", key="login_password")
+    if st.button("Login"):
+        if authenticate_user(username, password):
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Ungültiger Benutzername oder Passwort")
+
+def logout():
+    st.session_state.authenticated = False
+    st.session_state.report_generated = False # Reset report view on logout
+    st.rerun()
+
 def update_summary():
     st.session_state.generated_summary = st.session_state.summary_input
 
@@ -53,6 +79,11 @@ def update_miete_pro_m2():
 
 def main():
     st.set_page_config(layout="wide")
+
+    if not st.session_state.authenticated:
+        login_page()
+        return
+
     st.title("LELIA Reporting")
 
     # Inject custom CSS for sidebar color
@@ -70,7 +101,12 @@ def main():
     # --- Sidebar Setup ---
     with st.sidebar:
         st.image("../templates/LELIA_LOGO_L_W.png", width=200)
-        st.title("Einstellungen")
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.title("Einstellungen")
+        with col2:
+            st.button("Logout", icon=":material/logout:", on_click=logout) # Added icon
 
         st.header("1. Dateien hochladen")
         uploaded_report = st.file_uploader("Excel-Report", type="xlsx", key="report_uploader")
@@ -86,7 +122,7 @@ def main():
         user_notes = st.text_area("Anmerkungen für die Zusammenfassung:", height=150, key="summary_notes")
         budget_notes = st.text_area("Anmerkungen für das Budget:", height=150, key="budget_notes")
 
-        if st.button("Bericht generieren & aktualisieren"):
+        if st.button("Bericht generieren", icon=":material/build:"): # Changed text and added icon
             if st.session_state.full_financial_data and st.session_state.uploaded_image:
                 with st.spinner("Generiere Texte mit Gemini..."):
                     financial_data = st.session_state.get('full_financial_data', {})
@@ -103,6 +139,7 @@ def main():
                 st.success("Texte wurden generiert!")
             else:
                 st.warning("Bitte laden Sie sowohl einen Excel-Report als auch ein Bild hoch.")
+
 
     # --- Main Content Layout (Editor & Preview) ---
     if st.session_state.report_generated:
@@ -166,7 +203,7 @@ def main():
                 st.session_state.full_financial_data
             )
     else:
-        st.info("Bitte laden Sie einen Excel-Report und ein Deckblatt-Bild in der Seitenleiste hoch und klicken Sie auf 'Bericht generieren & aktualisieren', um zu beginnen.")
+        st.info("Bitte laden Sie einen Excel-Report und ein Deckblatt-Bild in der Seitenleiste hoch und klicken Sie auf 'Bericht generieren', um zu beginnen.")
 
 
 if __name__ == "__main__":

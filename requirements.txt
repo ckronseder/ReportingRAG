@@ -3,5 +3,5 @@ pandas
 plotly
 openpyxl
 google-genai
-markdown
-pandoc
+reportlab
+python-dotenv
