@@ -5,6 +5,7 @@ __pycache__/
 *$py.class
 .env
 .venv
+.idea/
 env/
 venv/
 build/
@@ -15,7 +16,7 @@ documentation/
 
 # --- Streamlit ---
 # Ignore the credentials file but keep your config
-.streamlit/secrets.toml
+src/.streamlit/secrets.toml
 
 # --- OS Specific ---
 .DS_Store
