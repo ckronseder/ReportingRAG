@@ -3,9 +3,9 @@ pandas
 openpyxl
 jinja2
 reportlab
-plotly
 markdown
 google-genai
 numpy
 reportlab
-kaleido
+plotly>=6.0.0
+kaleido>=1.0.0

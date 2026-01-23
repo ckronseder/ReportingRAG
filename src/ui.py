@@ -22,15 +22,19 @@ import tempfile
 # For robust deployment on Heroku, we explicitly configure Kaleido to use the
 # Chromium executable provided by the Google Chrome buildpack.
 
-chrome_path = os.environ.get("KALEIDO_BROWSER_PATH")
-if chrome_path:
-    # 1. Set the path to the executable provided by the buildpack.
-    pio.kaleido.scope.chromium_path = chrome_path
+# The heroku-buildpack-chrome-for-testing buildpack automatically sets the
+# GOOGLE_CHROME_BIN environment variable to the path of the executable.
+chrome_path = os.environ.get("GOOGLE_CHROME_BIN")
 
+if chrome_path:
+    # For Plotly v6+, the Kaleido configuration has moved to `pio.defaults`.
+    # 1. Set the path to the executable provided by the buildpack.
+    pio.defaults.kaleido.executable = chrome_path
+    
     # 2. Add mandatory flags for running in a containerized environment.
-    # --no-sandbox: Disables the sandbox, essential for Heroku/Docker.
+    # --no-sandbox: Essential for Heroku/Docker.
     # --disable-dev-shm-usage: Prevents out-of-memory errors by using /tmp.
-    pio.kaleido.scope.chromium_args = ("--no-sandbox", "--disable-dev-shm-usage")
+    pio.defaults.kaleido.chrome_args = ["--no-sandbox", "--disable-dev-shm-usage"]
 
 
 def image_to_base64(path):
