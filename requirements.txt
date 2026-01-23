@@ -8,3 +8,4 @@ markdown
 google-genai
 numpy
 reportlab
+kaleido
