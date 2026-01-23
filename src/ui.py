@@ -386,11 +386,12 @@ def display_html_report(report_title, image_file, full_financial_data):
     waterfall_fig = create_waterfall_chart(waterfall_x, waterfall_y, waterfall_measure)
     waterfall_html = waterfall_fig.to_html(full_html=False, include_plotlyjs='cdn')
 
-    template_dir = '../templates'
+    # --- Robust Path Construction ---
+    script_dir = os.path.dirname(__file__)
+    templates_dir = os.path.abspath(os.path.join(script_dir, '..', 'templates'))
     
-    logo_path = os.path.join(template_dir, 'LELIA_LOGO_L_W.png')
-    css_path = os.path.join(template_dir    logo_path = os.path.join(template_dir, 'LELIA_LOGO_L_W.png')
-    css_path = os.path.join(template_dir, 'tailwind.css')
+    logo_path = os.path.join(templates_dir, 'LELIA_LOGO_L_W.png')
+    css_path = os.path.join(templates_dir, 'tailwind.css')
 
     logo_base64 = image_to_base64(logo_path)
     hero_image_base64 = base64.b64encode(image_file.getbuffer()).decode()

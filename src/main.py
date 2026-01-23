@@ -1,14 +1,6 @@
 import os
 import streamlit as st
 
-# --- Environment Fix for LaTeX on macOS ---
-# This must be at the very top. It tells the script where to find the 'xelatex' engine.
-# The standard path for MacTeX is /Library/TeX/texbin.
-latex_path = '/Library/TeX/texbin'
-if latex_path not in os.environ['PATH']:
-    os.environ['PATH'] = latex_path + ':' + os.environ['PATH']
-# --- End of Environment Fix ---
-
 from data_loader import load_financial_data
 from ui import display_html_report
 from llm_handler import generate_summary_with_gemini, generate_waterfall_explanation, generate_budget_proposal
@@ -100,7 +92,10 @@ def main():
 
     # --- Sidebar Setup ---
     with st.sidebar:
-        st.image("../templates/LELIA_LOGO_L_W.png", width=200)
+        # Make path relative to the current script file for robustness
+        script_dir = os.path.dirname(__file__)
+        logo_path = os.path.join(script_dir, "..", "templates", "LELIA_LOGO_L_W.png")
+        st.image(logo_path, width=200)
         
         col1, col2 = st.columns([3, 1])
         with col1:
