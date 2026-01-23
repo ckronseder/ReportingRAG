@@ -1,0 +1,10 @@
+streamlit
+pandas
+openpyxl
+jinja2
+reportlab
+plotly
+markdown
+google-genai
+numpy
+reportlab

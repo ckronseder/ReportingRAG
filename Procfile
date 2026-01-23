@@ -1,1 +1,1 @@
-web: streamlit run src/main.py
+web: streamlit run main.py --server.port=$PORT --server.address=0.0.0.0
