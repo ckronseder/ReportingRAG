@@ -9,10 +9,13 @@ env/
 venv/
 build/
 dist/
+data/
+docs/
+documentation/
 
 # --- Streamlit ---
 # Ignore the credentials file but keep your config
-.streamlit/credentials.toml
+.streamlit/secrets.toml
 
 # --- OS Specific ---
 .DS_Store
