@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import json
 
 from data_loader import load_financial_data
 from ui import display_html_report
@@ -29,10 +30,19 @@ if 'rendite_eigenkapital' not in st.session_state:
 if 'miete_pro_m2' not in st.session_state:
     st.session_state.miete_pro_m2 = 0.0
 
+def get_credentials():
+    """Fetches user credentials from the environment or local secrets."""
+    user_list_json = os.environ.get("USER_LIST")
+    if user_list_json:
+        return json.loads(user_list_json)
+    if "credentials" in st.secrets:
+        return st.secrets["credentials"]
+    return []
 
 def authenticate_user(username, password):
     """Checks if the provided username and password match any in the secrets."""
-    for user_creds in st.secrets["credentials"]:
+    credentials = get_credentials()
+    for user_creds in credentials:
         if user_creds["username"] == username and user_creds["password"] == password:
             return True
     return False

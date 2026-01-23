@@ -2,22 +2,33 @@ import streamlit as st
 import google.genai as genai
 import google.genai.types as types
 import re
+import os
 
-def generate_summary_with_gemini(user_notes, financial_data):
-    """
-    Generates an executive summary and a blockquote using the Gemini API, ensuring the output is in German.
-    """
-    # Configure the Gemini API
+# --- Centralized API Configuration ---
+
+# Define the model name as a constant to ensure consistency and ease of updates.
+MODEL_NAME = 'gemini-2.5-flash'
+
+def get_gemini_client():
+    """Initializes and returns the Gemini client, handling errors."""
+    api_key = os.environ.get("GEM_API") or st.secrets.get("GEM_API")
+    if not api_key:
+        st.error("GEMINI_API_KEY not found. Please set it in your environment or secrets.")
+        return None
     try:
-        client = genai.Client(api_key=st.secrets["GEM_API"])
+        client = genai.Client(api_key=api_key)
+        return client
     except Exception as e:
         st.error(f"Failed to configure Gemini API: {e}")
-        return "Error: API Key not configured.", "Could not generate summary."
+        return None
 
-    # Define the model
-    model = 'gemini-2.5-flash'
 
-    # Construct the prompt
+def generate_summary_with_gemini(user_notes, financial_data):
+    """Generates an executive summary and a blockquote using the Gemini API."""
+    client = get_gemini_client()
+    if not client:
+        return "Fehler: API-Client konnte nicht initialisiert werden.", "Zusammenfassung konnte nicht generiert werden."
+
     prompt = f"""
     You are a financial analyst for a Swiss real estate firm. Your task is to write a professional executive summary for a property management report.
     The entire response must be in German.
@@ -53,7 +64,7 @@ def generate_summary_with_gemini(user_notes, financial_data):
     try:
         # Generate the content
         response = client.models.generate_content(
-            model= model,
+            model=MODEL_NAME,
             contents=types.Part.from_text(text=prompt),
             config=types.GenerateContentConfig(
                 temperature=0.1,
@@ -79,13 +90,9 @@ def generate_waterfall_explanation(aufwand_data):
     """
     Generates an explanation for the waterfall chart based on the Aufwand data.
     """
-    try:
-        client = genai.Client(api_key=st.secrets["GEM_API"])
-    except (KeyError, AttributeError):
-        st.error("Gemini API key not found. Please add it to your Streamlit secrets.")
-        return "Error: API Key not configured."
-
-    model = 'gemini-2.5-flash'
+    client = get_gemini_client()
+    if not client:
+        return "Fehler bei der Generierung der Wasserfall-Erklärung."
 
     prompt = f"""
     You are a financial analyst for a Swiss real estate firm. Your task is to write a short, professional explanation for the waterfall chart based on the provided expense data.
@@ -104,7 +111,7 @@ def generate_waterfall_explanation(aufwand_data):
     try:
         # Generate the content
         response = client.models.generate_content(
-            model=model,
+            model=MODEL_NAME,
             contents=types.Part.from_text(text=prompt),
             config=types.GenerateContentConfig(
                 temperature=0.1,
@@ -126,13 +133,9 @@ def generate_budget_proposal(budget_notes, financial_data):
     """
     Generates a budget proposal for the upcoming year.
     """
-    try:
-        client = genai.Client(api_key=st.secrets["GEM_API"])
-    except (KeyError, AttributeError):
-        st.error("Gemini API key not found. Please add it to your Streamlit secrets.")
-        return "Error: API Key not configured."
-
-    model = 'gemini-2.5-flash'
+    client = get_gemini_client()
+    if not client:
+        return "Fehler bei der Generierung des Budgetvorschlags."
 
     prompt = f"""
     You are a strategic financial planner for a Swiss real estate firm. Your task is to create a budget proposal for the upcoming year.
@@ -157,7 +160,7 @@ def generate_budget_proposal(budget_notes, financial_data):
     try:
         # Generate the content
         response = client.models.generate_content(
-            model=model,
+            model=MODEL_NAME,
             contents=types.Part.from_text(text=prompt),
             config=types.GenerateContentConfig(
                 temperature=0.1,
