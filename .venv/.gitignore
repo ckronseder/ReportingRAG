@@ -1,0 +1,19 @@
+# created by virtualenv automatically
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+build/
+dist/
+
+# --- Streamlit ---
+# Ignore the credentials file but keep your config
+.streamlit/credentials.toml
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db

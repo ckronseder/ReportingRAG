@@ -400,7 +400,7 @@ def display_html_report(report_title, image_file, full_financial_data):
     """
     # --- Robust Path Construction ---
     script_dir = os.path.dirname(__file__)
-    template_dir = os.path.abspath(os.path.join(script_dir, '..', 'templates'))
+    template_dir = os.path.abspath(os.path.join(script_dir, 'templates')) # Updated path
 
     dynamic_date_range = "Daten nicht verfügbar"
     if "Erfolgsrechnung" in full_financial_data and not full_financial_data["Erfolgsrechnung"].empty:

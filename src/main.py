@@ -94,7 +94,7 @@ def main():
     with st.sidebar:
         # Make path relative to the current script file for robustness
         script_dir = os.path.dirname(__file__)
-        logo_path = os.path.join(script_dir, "templates", "LELIA_LOGO_L_W.png")
+        logo_path = os.path.join(script_dir, "templates", "LELIA_LOGO_L_W.png") # Updated path
         st.image(logo_path, width=200)
         
         col1, col2 = st.columns([3, 1])

@@ -1,0 +1,5 @@
+# Example .slugignore content
+docs/
+documentation/
+data/
+tests/
