@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.io as pio
 from jinja2 import Environment, FileSystemLoader
 import os
 import base64
@@ -16,6 +17,21 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.lib.pagesizes import landscape, A4
 import tempfile
+
+# --- Kaleido Configuration for Heroku ---
+# For robust deployment on Heroku, we explicitly configure Kaleido to use the
+# Chromium executable provided by the Google Chrome buildpack.
+
+chrome_path = os.environ.get("KALEIDO_BROWSER_PATH")
+if chrome_path:
+    # 1. Set the path to the executable provided by the buildpack.
+    pio.kaleido.scope.chromium_path = chrome_path
+
+    # 2. Add mandatory flags for running in a containerized environment.
+    # --no-sandbox: Disables the sandbox, essential for Heroku/Docker.
+    # --disable-dev-shm-usage: Prevents out-of-memory errors by using /tmp.
+    pio.kaleido.scope.chromium_args = ("--no-sandbox", "--disable-dev-shm-usage")
+
 
 def image_to_base64(path):
     """Converts an image file to a Base64 string."""
